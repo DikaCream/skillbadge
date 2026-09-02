@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+dist/
+npm-debug.log*
+
+# Vercel / deploys
+.vercel/
+.vercelignore
+
+# Local caches
+.npm-cache/
+
+# OS
+.DS_Store

@@ -1,0 +1,170 @@
+/* ================================================================
+   SkillBadge — badge cards, verdict chips, tier chips, leaderboard.
+   ================================================================ */
+
+/* ---------------------------------------------------------------- verdict */
+.badge.verdict-pending {
+  color: var(--warn);
+  border-color: rgba(255, 178, 36, 0.55);
+  background: rgba(255, 178, 36, 0.08);
+}
+
+.badge.verdict-verified {
+  color: var(--green);
+  border-color: rgba(47, 191, 113, 0.55);
+  background: rgba(47, 191, 113, 0.09);
+  font-weight: 700;
+}
+
+.badge.verdict-rejected {
+  color: var(--red);
+  border-color: rgba(255, 87, 87, 0.55);
+  background: rgba(255, 87, 87, 0.08);
+}
+
+/* ---------------------------------------------------------------- tier chips */
+.tier-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+
+.tier-chip.tier-gold {
+  color: var(--gold);
+  border-color: rgba(255, 207, 77, 0.6);
+  background: rgba(255, 207, 77, 0.08);
+}
+
+.tier-chip.tier-silver {
+  color: #c9d2dd;
+  border-color: rgba(201, 210, 221, 0.5);
+  background: rgba(201, 210, 221, 0.07);
+}
+
+.tier-chip.tier-bronze {
+  color: #e0a16f;
+  border-color: rgba(224, 161, 111, 0.55);
+  background: rgba(224, 161, 111, 0.07);
+}
+
+/* ---------------------------------------------------------------- badge card */
+.badge-card {
+  gap: 12px;
+}
+
+.badge-head {
+  align-items: flex-start;
+}
+
+.badge-id {
+  font-size: 0.72rem;
+  color: var(--muted-2);
+  letter-spacing: 0.1em;
+}
+
+.badge-skill {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge-url {
+  font-size: 0.73rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.badge-note {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.badge-holder {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.badge-reason {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.badge-actions {
+  margin-top: auto;
+  justify-content: flex-end;
+}
+
+.badge-meta {
+  border-top: 1px solid var(--border);
+  padding-top: 9px;
+}
+
+/* ---------------------------------------------------------------- leaderboard */
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+}
+
+.leader-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--panel), var(--bg-alt));
+  margin-bottom: 8px;
+}
+
+.leader-row .lb-rank {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--muted-2);
+}
+
+.leader-row:first-child .lb-rank {
+  color: var(--gold);
+}
+
+.leader-row .lb-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.leader-row .lb-who .lb-skill {
+  font-weight: 600;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leader-row .lb-who .lb-holder {
+  font-size: 0.75rem;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
