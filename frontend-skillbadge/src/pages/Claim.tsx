@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSkillBadge } from "../context/SkillBadgeContext";
 import { MAX_NOTE_CHARS, MAX_SKILL_CHARS, MIN_SKILL_CHARS } from "../config";
+import { describeEvidenceUrl, shortUrl } from "../lib/evidence";
 
 interface FieldErrors {
   url?: string;
@@ -20,11 +21,16 @@ export default function Claim() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Live description of what the validators will fetch for the typed URL.
+  const evidence = useMemo(() => describeEvidenceUrl(url), [url]);
+
   const validate = (): FieldErrors => {
     const errors: FieldErrors = {};
-    const u = url.trim();
-    if (!/^https:\/\/[^\s]+$/i.test(u)) {
-      errors.url = "Enter a public https:// URL (GitHub profile or repo).";
+    const u = evidence.submitUrl;
+    if (evidence.kind === "empty") {
+      errors.url = "Enter a public https:// URL.";
+    } else if (!/^https:\/\/[^\s]+$/i.test(u)) {
+      errors.url = "Enter a public https:// URL.";
     }
     const s = skill.trim();
     if (s.length < MIN_SKILL_CHARS || s.length > MAX_SKILL_CHARS) {
@@ -51,7 +57,11 @@ export default function Claim() {
 
     setBusy(true);
     try {
-      const txHash = await contract.claimSkill(url.trim(), skill.trim(), note.trim());
+      const txHash = await contract.claimSkill(
+        evidence.submitUrl,
+        skill.trim(),
+        note.trim(),
+      );
       await contract.waitForReceipt(txHash);
       navigate("/badges");
     } catch (err) {
@@ -80,7 +90,7 @@ export default function Claim() {
 
       <form className="form panel" onSubmit={onSubmit} noValidate>
         <label>
-          Public GitHub URL (profile or repo)
+          Public https:// URL (repo, file, or docs page)
           <input
             type="url"
             value={url}
@@ -93,8 +103,25 @@ export default function Claim() {
           )}
         </label>
 
+        {evidence.kind !== "empty" && (
+          <div
+            className={`evidence-note ${evidence.warn ? "warn" : "ok"}`}
+            role="status"
+          >
+            <div className="evidence-kind">
+              {evidence.warn ? "⚠" : "✓"} {evidence.note}
+            </div>
+            {evidence.submitUrl &&
+              evidence.submitUrl !== url.trim() && (
+                <div className="evidence-preview mono">
+                  Will be submitted: {shortUrl(evidence.submitUrl)}
+                </div>
+              )}
+          </div>
+        )}
+
         <label>
-          Skill
+          What skill does the code show?
           <input
             type="text"
             value={skill}

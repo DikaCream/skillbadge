@@ -176,6 +176,34 @@ export function formatAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+/** Format a unix-seconds timestamp as a short date ("Sep 1, 2026"). 0 -> "—". */
+export function formatDate(unixSeconds: number): string {
+  if (!unixSeconds) return "—";
+  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** Relative time like "2h ago". 0 -> "—". */
+export function timeAgo(unixSeconds: number): string {
+  if (!unixSeconds) return "—";
+  const diffSec = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+/** Format a millisecond duration as m:ss for cooldown countdowns. */
+export function fmtCountdown(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 const GEN_DECIMALS = 18n;
 const GEN_ONE = 10n ** GEN_DECIMALS;
 

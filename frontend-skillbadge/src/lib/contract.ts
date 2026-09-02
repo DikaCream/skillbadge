@@ -1,5 +1,15 @@
 import { CONTRACT_ADDRESS } from "../config";
 import { Badge, Stats, toInt } from "./types";
+import { CalldataAddress } from "genlayer-js/types";
+
+/** Wrap a 0x-address into the CalldataAddress wrapper genlayer-js expects. */
+function toCalldataAddress(address: string): CalldataAddress {
+  const hex = address.startsWith("0x") ? address.slice(2) : address;
+  const bytes = new Uint8Array(
+    hex.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+  );
+  return new CalldataAddress(bytes);
+}
 
 function fromMapLike(v: any): Record<string, any> {
   if (v instanceof Map) {
@@ -95,7 +105,11 @@ export class SkillBadge {
   }
 
   async listClaimsByUser(holder: string, offset = 0, limit = 50): Promise<Badge[]> {
-    const v = await this.read("list_claims_by_user", [holder, offset, limit]);
+    const v = await this.read("list_claims_by_user", [
+      toCalldataAddress(holder),
+      offset,
+      limit,
+    ]);
     return Array.isArray(v) ? v.map(toBadge) : [];
   }
 

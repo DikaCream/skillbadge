@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BadgeCard from "../components/BadgeCard";
 import { useSkillBadge } from "../context/SkillBadgeContext";
+import { timeAgo } from "../lib/client";
 import type { Badge, Stats } from "../lib/types";
 
 const POLL_MS = 10000;
-type Filter = "all" | "verified";
+type Filter = "all" | "verified" | "pending" | "rejected";
+type SortKey = "newest" | "oldest" | "skill" | "holder";
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "verified", label: "Verified" },
+  { key: "pending", label: "Pending" },
+  { key: "rejected", label: "Rejected" },
+];
 
 export default function Badges() {
   const { wallet, contract } = useSkillBadge();
@@ -12,11 +21,17 @@ export default function Badges() {
   const [mine, setMine] = useState<Badge[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setRefreshing(true);
     try {
       const [all, s, my] = await Promise.all([
         contract.listBadges(0, 50),
@@ -29,16 +44,18 @@ export default function Badges() {
       setStats(s);
       setMine(my);
       setError(null);
+      setLastUpdated(Date.now());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load badges.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [contract, wallet.address]);
 
   useEffect(() => {
     refresh();
-    const poll = setInterval(refresh, POLL_MS);
+    const poll = setInterval(() => refresh(true), POLL_MS);
     return () => clearInterval(poll);
   }, [refresh]);
 
@@ -49,7 +66,7 @@ export default function Badges() {
       try {
         const txHash = await fn();
         await contract.waitForReceipt(txHash);
-        await refresh();
+        await refresh(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Transaction failed.");
       } finally {
@@ -64,22 +81,79 @@ export default function Badges() {
     [contract, runTx],
   );
 
+  // Counts by verdict, computed from the fetched list rather than the
+  // contract's get_stats, whose pending/rejected fields are unreliable.
+  const counts = useMemo(() => {
+    const c = { total: badges.length, verified: 0, pending: 0, rejected: 0 };
+    for (const b of badges) {
+      if (b.verdict === "VERIFIED") c.verified++;
+      else if (b.verdict === "REJECTED") c.rejected++;
+      else c.pending++;
+    }
+    return c;
+  }, [badges]);
+
+  const matchesQuery = useCallback(
+    (b: Badge) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      const id = `#${b.id}`;
+      return (
+        b.skill.toLowerCase().includes(q) ||
+        b.github_url.toLowerCase().includes(q) ||
+        b.holder.toLowerCase().includes(q) ||
+        b.note.toLowerCase().includes(q) ||
+        (b.reason || "").toLowerCase().includes(q) ||
+        id.includes(q)
+      );
+    },
+    [query],
+  );
+
+  const sortBadges = useCallback(
+    (list: Badge[]) => {
+      const arr = [...list];
+      if (sort === "newest") arr.sort((a, b) => b.id - a.id);
+      else if (sort === "oldest") arr.sort((a, b) => a.id - b.id);
+      else if (sort === "skill")
+        arr.sort((a, b) => a.skill.localeCompare(b.skill) || b.id - a.id);
+      else arr.sort((a, b) => a.holder.localeCompare(b.holder) || b.id - a.id);
+      return arr;
+    },
+    [sort],
+  );
+
   const applyFilter = useCallback(
     (list: Badge[]) =>
-      filter === "verified" ? list.filter((b) => b.verdict === "VERIFIED") : list,
+      list.filter(
+        (b) =>
+          filter === "all" ||
+          (filter === "verified" && b.verdict === "VERIFIED") ||
+          (filter === "pending" && b.verdict === "PENDING") ||
+          (filter === "rejected" && b.verdict === "REJECTED"),
+      ),
     [filter],
   );
-  const visibleMine = useMemo(() => applyFilter(mine), [applyFilter, mine]);
-  const visibleAll = useMemo(() => applyFilter(badges), [applyFilter, badges]);
+
+  const visibleMine = useMemo(
+    () => sortBadges(applyFilter(mine.filter(matchesQuery))),
+    [mine, applyFilter, matchesQuery, sortBadges],
+  );
+  const visibleAll = useMemo(
+    () => sortBadges(applyFilter(badges.filter(matchesQuery))),
+    [badges, applyFilter, matchesQuery, sortBadges],
+  );
+
+  const pillCount = (key: Filter) =>
+    key === "all" ? counts.total : counts[key];
 
   return (
     <div className="page container">
       <div className="page-head">
         <h1>Badges</h1>
         <p className="muted">
-          Every claim on this contract. A <strong>Pending</strong> badge turns
-          <strong> Verified</strong> (with a tier) or <strong>Rejected</strong>{" "}
-          once the validators review the repo; anyone can trigger the review.
+          Claimed skills judged by the validators. Trigger the review on any
+          Pending badge; only evidence on the linked URL counts.
         </p>
       </div>
 
@@ -88,32 +162,73 @@ export default function Badges() {
       {stats && (
         <div className="stats-row" style={{ marginBottom: 26 }}>
           <div className="stat">
-            <div className="stat-value">{stats.total_claims}</div>
+            <div className="stat-value">{counts.total}</div>
             <div className="stat-label">Total claims</div>
           </div>
           <div className="stat">
-            <div className="stat-value blue">{stats.verified}</div>
+            <div className="stat-value blue">{counts.verified}</div>
             <div className="stat-label">Verified</div>
+          </div>
+          <div className="stat">
+            <div className="stat-value warn">{counts.pending}</div>
+            <div className="stat-label">Pending</div>
+          </div>
+          <div className="stat">
+            <div className="stat-value red">{counts.rejected}</div>
+            <div className="stat-label">Rejected</div>
           </div>
         </div>
       )}
 
-      <div className="filter-pills" role="group" aria-label="Filter badges">
-        <button
-          className={filter === "all" ? "active" : ""}
-          aria-pressed={filter === "all"}
-          onClick={() => setFilter("all")}
-        >
-          All
-        </button>
-        <button
-          className={filter === "verified" ? "active" : ""}
-          aria-pressed={filter === "verified"}
-          onClick={() => setFilter("verified")}
-        >
-          Verified
-        </button>
+      <div className="badges-toolbar">
+        <div className="filter-pills" role="group" aria-label="Filter badges">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={filter === f.key ? "active" : ""}
+              aria-pressed={filter === f.key}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+              <span className="pill-count">{pillCount(f.key)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-actions">
+          <input
+            className="search-input"
+            type="search"
+            placeholder="Search skill, URL, address…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search badges"
+          />
+          <select
+            className="sort-select"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            aria-label="Sort badges"
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="skill">Skill A–Z</option>
+            <option value="holder">Claimant</option>
+          </select>
+          <button
+            className="ghost small"
+            onClick={() => refresh(true)}
+            disabled={refreshing}
+            title="Refresh from chain"
+          >
+            {refreshing ? "Updating…" : "Refresh"}
+          </button>
+        </div>
       </div>
+      {lastUpdated && !loading && (
+        <p className="toolbar-hint muted">
+          {visibleAll.length} shown · updated {timeAgo(Math.floor(lastUpdated / 1000))}
+        </p>
+      )}
 
       {loading ? (
         <div className="page-loading" role="status">
@@ -124,7 +239,8 @@ export default function Badges() {
           {visibleMine.length > 0 && (
             <section style={{ marginBottom: 34 }}>
               <h2 className="section-title">
-                Your claims <span className="accent">({visibleMine.length})</span>
+                Your claims{" "}
+                <span className="accent">({visibleMine.length})</span>
               </h2>
               <div className="grid">
                 {visibleMine.map((b) => (
@@ -141,9 +257,9 @@ export default function Badges() {
           )}
 
           <h2 className="section-title">
-            All badges <span className="accent">({badges.length})</span>
+            All badges <span className="accent">({counts.total})</span>
           </h2>
-          {badges.length === 0 ? (
+          {counts.total === 0 ? (
             <div className="empty">
               <p>No claims yet.</p>
               <p>
@@ -152,10 +268,16 @@ export default function Badges() {
             </div>
           ) : visibleAll.length === 0 ? (
             <div className="empty">
-              <p>Nothing verified yet.</p>
+              <p>No badges match that search or filter.</p>
               <p>
-                <button className="ghost" onClick={() => setFilter("all")}>
-                  Show all claims →
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setQuery("");
+                    setFilter("all");
+                  }}
+                >
+                  Clear filters →
                 </button>
               </p>
             </div>

@@ -56,6 +56,32 @@
 /* ---------------------------------------------------------------- badge card */
 .badge-card {
   gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* verdict accent bar on the left edge */
+.badge-card.acc-verified::before,
+.badge-card.acc-pending::before,
+.badge-card.acc-rejected::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.badge-card.acc-verified::before {
+  background: var(--green);
+}
+
+.badge-card.acc-pending::before {
+  background: var(--warn);
+}
+
+.badge-card.acc-rejected::before {
+  background: var(--red);
 }
 
 .badge-head {
@@ -113,7 +139,65 @@
 
 .badge-meta {
   border-top: 1px solid var(--border);
-  padding-top: 9px;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 14px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.meta-label {
+  font-size: 0.62rem;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+}
+
+.meta-value {
+  font-size: 0.82rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-value.mono {
+  font-size: 0.78rem;
+}
+
+.badge-reason.reason-ok {
+  border-color: rgba(47, 191, 113, 0.4);
+  background: rgba(47, 191, 113, 0.05);
+}
+
+.badge-reason.reason-no {
+  border-color: rgba(255, 87, 87, 0.4);
+  background: rgba(255, 87, 87, 0.05);
+}
+
+.attempt-chip {
+  font-size: 0.72rem;
+  color: var(--warn);
+  border: 1px solid rgba(255, 178, 36, 0.45);
+  background: rgba(255, 178, 36, 0.07);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.cooldown {
+  font-size: 0.78rem;
+  color: var(--muted);
+  border: 1px dashed var(--border-strong);
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
 }
 
 /* ---------------------------------------------------------------- leaderboard */
