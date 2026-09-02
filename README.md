@@ -1,151 +1,83 @@
 # SkillBadge
 
-A credential dapp on [GenLayer](https://genlayer.com)'s StudioNet. You claim a
-skill against a public GitHub repo; the network's validators actually read the
-code and judge whether the repo backs the claim.
+SkillBadge is a credential dapp on GenLayer's StudioNet. You claim a skill, say "python" or "typescript", against a public GitHub repo. The network's validators fetch your URL, read what's actually there, and vote on a verdict: **VERIFIED** (bronze, silver, or gold) or **REJECTED**, each with a written reason. No money moves in either case.
 
-No money. One AI call per badge. The verdict is a tier, not a payout.
+Claims and verifications are free. Anyone can verify any badge, not just their own, and a verified badge stays on-chain as public proof.
 
-## What the validators do
+## Try it
 
-The judge runs on GenLayer's AI validators. Same who vote `AGREE` on the
-consensus layer. They fetch the repo URL, look at the code, and write a
-verdict: **VERIFIED** (bronze, silver, or gold) or **REJECTED**, with a reason.
-
-The claim is free. Verification is permissionless: you can verify your own
-badge or someone else's. A REJECTED badge can be re-claimed and retried; a
-VERIFIED badge stays on-chain as proof.
-
-## How a badge goes
-
-1. The holder writes a claim: a public (https only) URL, a skill name
-   (2–40 chars), and an optional note (up to 300 chars). Up to 10 claims per
-   address.
-2. Anyone calls `verify_badge(badge_id)`. The validators fetch the URL and
-   vote on a verdict: VERIFIED bronze/silver/gold, or REJECTED with a reason.
-3. If the verdict string can't be parsed, the badge stays PENDING and can be
-   retried after a 5-minute cooldown, up to 5 attempts. Fail closed — a stuck
-   badge never pays out anything (there's nothing to pay out).
-
-The contract neutralizes `[System]` / `[User]` markers in the claim text so
-prompt injection has nothing to latch onto, and refuses URLs that point at
-private or internal hosts.
-
-## Evidence URLs: what the validators actually read
-
-This is the one gotcha that separates VERIFIED from REJECTED claims. The
-contract fetches evidence with `web.render(url, mode="text")` — the
-validators read a page as rendered text, not as a file tree.
-
-- A repo landing page (`github.com/owner/repo`) renders as its README plus a
-  list of file names. No source code. Claiming "typescript" against that
-  page gets REJECTED: there is nothing for the judge to read.
-- A raw file (`raw.githubusercontent.com/owner/repo/main/src/file.ts`) renders
-  as the actual source. That is the evidence that verifies.
-- Docs pages and rendered content (a README that shows real usage, a docs
-  site) work when the page itself carries the proof.
-
-That was learned the hard way on-chain: a `typescript` claim against the
-Truth-Bets repo landing page was REJECTED ("only a repository README and
-file listing, not actual TypeScript source code"), then re-claimed against
-the raw `contract.ts` file and VERIFIED silver. Same repo, same skill, only
-the URL form changed.
-
-The claim form lives this rule: it previews what the validators will fetch
-as you type, and rewrites GitHub `/blob/` links to their
-`raw.githubusercontent.com` equivalents before submitting.
-
-## Live state
-
-Contract on StudioNet: `0xde308783bDB67467cb94f4De6d9Bf65e73C0A321`
-
-It was deployed with 5/5 validator agreement in tx
-`0xf5a7a3c6...6252` (ACCEPTED).
-
-As of early September 2026 the board holds three claims, two verified:
+- App: https://skillbadge-cyan.vercel.app (chain 61999, no wallet funds needed)
+- Contract: `0xde308783bDB67467cb94f4De6d9Bf65e73C0A321` on StudioNet, deployed in tx `0xf5a7a3c6...6252` with 5/5 validator agreement
+- Board state (early September 2026): three claims, two verified
 
 | Badge | Skill | Evidence | Verdict |
 |---|---|---|---|
-| 1 | python | `genlayerlabs/genlayer-py` repo | VERIFIED silver |
-| 2 | typescript | `DikaCream/Truth-Bets` repo page | REJECTED (README-only) |
+| 1 | python | `genlayerlabs/genlayer-py` repo page | VERIFIED silver |
+| 2 | typescript | `DikaCream/Truth-Bets` repo page | REJECTED |
 | 3 | typescript | raw `contract.ts` from the same repo | VERIFIED silver |
 
-The frontend lives at https://skillbadge-cyan.vercel.app and talks directly to
-the contract (chain id 61999, gasless — claims and verifications cost
-nothing). Badges 2 and 3 are the evidence-URL lesson above, recorded as a
-pair.
+Badges 2 and 3 are the same repo and the same skill. The only difference is the URL form, and that's worth understanding before you claim anything.
 
-## Repository layout
+## What validators actually read
 
-```
-contracts/skill_badge.py        the contract, one file
-tests/direct/                   local tests with mocked web + LLM
-tests/integration/              StudioNet tests against real consensus
-frontend-skillbadge/            Vite + React app
-scripts/setup.sh                environment bootstrap
-scripts/verify-skillbadge.sh    lint + tests in one command
-```
+The contract fetches evidence with `web.render(url, mode="text")`. Validators get the page as rendered text, not a file tree. That single fact decides most claims:
 
-## Quickstart
+- A repo landing page (`github.com/owner/repo`) renders as its README plus a list of filenames. No source code. Claiming "typescript" against that page gets REJECTED, because there's nothing to read.
+- A raw file (`raw.githubusercontent.com/owner/repo/main/src/file.ts`) renders as the actual source. That's what verifies.
+- Docs and rendered content, like a README that shows real usage, work when the page itself carries the proof.
+
+Badge 2 above was rejected with: "only a repository README and file listing, not actual TypeScript source code." Re-claimed against the raw file, it came back VERIFIED silver. Same repo, same skill; only the URL changed.
+
+The claim form enforces this rule for you. As you type it shows what the validators will fetch, and it rewrites GitHub `/blob/` links to their `raw.githubusercontent.com` equivalents before submitting.
+
+## How a claim works
+
+1. You file a claim: a public https URL, a skill name (2–40 chars), an optional note up to 300 chars. Ten claims per address.
+2. Anyone calls `verify_badge(badge_id)`. The validators fetch the URL and settle on a verdict with a reason.
+3. A verdict that can't be parsed leaves the badge PENDING. You can retry after a 5-minute cooldown, up to 5 attempts, and a failed attempt costs nothing.
+
+The contract strips `[System]` and `[User]` markers from claim text so prompt injection has nothing to grab, and it refuses URLs that resolve to private or internal hosts.
+
+## Run it locally
 
 ```bash
-./scripts/setup.sh               # Python venv + deps (official PyPI via pip.conf)
-./scripts/verify-skillbadge.sh   # lint + direct tests
-./scripts/verify-skillbadge.sh --frontend     # + frontend typecheck & build
-./scripts/verify-skillbadge.sh --integration  # StudioNet tests (~4 min)
+./scripts/setup.sh                # venv + deps (official PyPI via pip.conf)
+./scripts/verify-skillbadge.sh    # lint + direct tests
+./scripts/verify-skillbadge.sh --frontend      # + frontend typecheck & build
+./scripts/verify-skillbadge.sh --integration   # StudioNet tests (~4 min)
 ```
 
-To run the frontend locally:
+Frontend:
 
 ```bash
 cd frontend-skillbadge
 npm install
-cp .env.example .env.local   # defaults point at the live contract
+cp .env.example .env.local        # defaults point at the live contract
 npm run dev
 ```
 
-## Deploying your own instance
+## Deploy your own
 
 ```bash
-# needs a deployer keystore in .env (private key or keystore path + password)
+# needs a deployer keystore in .env (private key, or keystore path + password)
 genlayer deploy contracts/skill_badge.py
 ```
 
-Then update `VITE_CONTRACT_ADDRESS` in `frontend-skillbadge/.env.local` with
-the new address and redeploy the frontend.
+Point `VITE_CONTRACT_ADDRESS` in `frontend-skillbadge/.env.local` at the new address and redeploy the frontend.
 
-## What the contract refuses to do
+## Repo layout
 
-- No payouts, no fees, no escrow — nothing to rug.
-- No private or internal URLs: IP-literal, localhost, and private-range
-  addresses are rejected at claim time.
-- No network requests on the contract's own balance; verifications run under
-  consensus, so the wallet that triggers them pays nothing.
-- No unlimited junk: verify attempts are capped at 5 with a cooldown, claims
-  at 10 per address.
+```
+contracts/skill_badge.py        the contract, one file
+frontend-skillbadge/            Vite + React app
+tests/direct/                   local tests, mocked web + LLM
+tests/integration/              StudioNet tests against real consensus
+scripts/setup.sh                environment bootstrap
+scripts/verify-skillbadge.sh    lint + tests in one command
+```
 
-## Frontend
+Pages: `/` shows stats and top developers, `/badges` lists every claim with search, verdict filters that show real counts, sorting, claim and review dates, attempt chips, and a live retry countdown, and `/claim` files a claim with the evidence preview described above.
 
-Vite + React at `frontend-skillbadge/`, dark credential-registry look
-electric-blue + gold accents. Pages:
+## Tests
 
-- `/` — stats and the top developers.
-- `/badges` — every claim with search, verdict filters that show real
-  counts, sorting, and cards that carry claim/review dates, attempt chips,
-  and a live retry countdown while a pending badge cools down.
-- `/claim` — files a claim with a live evidence preview (see the URL rules
-  above).
-
-## Test coverage
-
-Direct tests (mocked web + LLM) cover the happy path, both tiers, duplicate
-claims, the fail-closed retry loop, the attempt cap, and the leaderboard.
-Integration tests run against real StudioNet consensus and verify an actual
-repo (`github.com/genlayerlabs/genlayer-py`, skill: python) end to end. An
-earlier experiment proved the evidence-URL rule on-chain: the same repo and
-skill verified when pointed at a raw source file but not at the repo landing
-page.
-
-The frontend has no automated test suite yet — pages are typechecked and
-built in CI-less local checks, and the contract logic carries the real
-tests.
+Direct tests mock the web fetch and the LLM, so the retry loop, the attempt cap, duplicate claims, both tiers, and the leaderboard all run locally. Integration tests hit real StudioNet consensus and verify `genlayerlabs/genlayer-py` (skill: python) end to end. The frontend has no automated test suite yet; its pages are typechecked and built, and the contract logic carries the real tests.
