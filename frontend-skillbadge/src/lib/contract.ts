@@ -1,5 +1,6 @@
 import { CONTRACT_ADDRESS } from "../config";
 import { Badge, Stats, toInt } from "./types";
+import { withReadRetry } from "./errors";
 import { CalldataAddress } from "genlayer-js/types";
 
 /** Wrap a 0x-address into the CalldataAddress wrapper genlayer-js expects. */
@@ -28,7 +29,8 @@ function toBadge(v: any): Badge {
     id: toInt(o.id),
     holder: String(o.holder ?? ""),
     skill: String(o.skill ?? ""),
-    github_url: String(o.github_url ?? ""),
+    owner_proof_url: String(o.owner_proof_url ?? ""),
+    evidence_url: String(o.evidence_url ?? ""),
     note: String(o.note ?? ""),
     verdict: String(o.verdict ?? "PENDING") as Badge["verdict"],
     tier: String(o.tier ?? "") as Badge["tier"],
@@ -60,11 +62,15 @@ export class SkillBadge {
   constructor(private client: any, private address: string = CONTRACT_ADDRESS) {}
 
   private async read(functionName: string, args: unknown[] = []): Promise<any> {
-    return this.client.readContract({
-      address: this.address as `0x${string}`,
-      functionName,
-      args,
-    });
+    // Consensus reads are slow and occasionally dropped; retry transient
+    // network failures so the UI doesn't flash errors on a hiccup.
+    return withReadRetry(() =>
+      this.client.readContract({
+        address: this.address as `0x${string}`,
+        functionName,
+        args,
+      }),
+    );
   }
 
   private async write(
@@ -119,9 +125,14 @@ export class SkillBadge {
   }
 
   // ---- writes ---------------------------------------------------------
-  /** Free: file a claim for a skill. */
-  async claimSkill(githubUrl: string, skill: string, note: string): Promise<string> {
-    return this.write("claim_skill", [githubUrl, skill, note]);
+  /** Free: file a claim for a skill with an owner proof + commit-pinned evidence. */
+  async claimSkill(
+    ownerProofUrl: string,
+    evidenceUrl: string,
+    skill: string,
+    note: string,
+  ): Promise<string> {
+    return this.write("claim_skill", [ownerProofUrl, evidenceUrl, skill, note]);
   }
 
   /** Permissionless: run validator consensus on a pending badge. */

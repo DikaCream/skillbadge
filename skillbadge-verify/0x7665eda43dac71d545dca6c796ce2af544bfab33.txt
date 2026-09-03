@@ -1,0 +1,8 @@
+skillbadge-owner-proof
+wallet: 0x7665eda43dac71d545dca6c796ce2af544bfab33
+repo: DikaCream/skillbadge
+
+This file proves control of this repository for SkillBadge claims. Only the
+owner of the repository can commit a file named after a wallet address; the
+validators check that this file exists at the claimed commit and contains the
+claimant's wallet address.

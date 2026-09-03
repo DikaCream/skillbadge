@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BadgeCard from "../components/BadgeCard";
+import ErrorBanner from "../components/ErrorBanner";
 import { useSkillBadge } from "../context/SkillBadgeContext";
 import { timeAgo } from "../lib/client";
 import type { Badge, Stats } from "../lib/types";
@@ -22,7 +23,7 @@ export default function Badges() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -46,7 +47,7 @@ export default function Badges() {
       setError(null);
       setLastUpdated(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load badges.");
+      setError(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -68,7 +69,7 @@ export default function Badges() {
         await contract.waitForReceipt(txHash);
         await refresh(true);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Transaction failed.");
+        setError(e);
       } finally {
         setBusyId(null);
       }
@@ -81,8 +82,7 @@ export default function Badges() {
     [contract, runTx],
   );
 
-  // Counts by verdict, computed from the fetched list rather than the
-  // contract's get_stats, whose pending/rejected fields are unreliable.
+  // Counts by verdict, computed from the fetched list.
   const counts = useMemo(() => {
     const c = { total: badges.length, verified: 0, pending: 0, rejected: 0 };
     for (const b of badges) {
@@ -100,7 +100,8 @@ export default function Badges() {
       const id = `#${b.id}`;
       return (
         b.skill.toLowerCase().includes(q) ||
-        b.github_url.toLowerCase().includes(q) ||
+        b.owner_proof_url.toLowerCase().includes(q) ||
+        b.evidence_url.toLowerCase().includes(q) ||
         b.holder.toLowerCase().includes(q) ||
         b.note.toLowerCase().includes(q) ||
         (b.reason || "").toLowerCase().includes(q) ||
@@ -157,7 +158,13 @@ export default function Badges() {
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error != null && (
+        <ErrorBanner
+          error={error}
+          onRetry={() => refresh(true)}
+          retrying={refreshing}
+        />
+      )}
 
       {stats && (
         <div className="stats-row" style={{ marginBottom: 26 }}>

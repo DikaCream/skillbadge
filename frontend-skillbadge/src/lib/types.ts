@@ -9,7 +9,8 @@ export interface Badge {
   id: number;
   holder: string;
   skill: string;
-  github_url: string;
+  owner_proof_url: string;
+  evidence_url: string;
   note: string;
   verdict: Verdict;
   tier: Tier;

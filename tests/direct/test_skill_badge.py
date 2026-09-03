@@ -1,14 +1,18 @@
 """SkillBadge direct-mode tests — happy path, tiers, fail-closed, views."""
 
 from tests.direct.conftest import (
-    SKILL_GITHUB_URL,
+    SKILL_EVIDENCE_URL,
     SKILL_NOTE,
     SKILL_PAGE,
+    SKILL_OWNER,
+    SKILL_REPO,
+    SKILL_SHA,
     SKILL_SKILL,
     addr,
     claim_badge,
     mock_verification,
     set_time,
+    skill_proof_url,
     to_hex,
     verified_badge,
 )
@@ -22,7 +26,8 @@ def test_claim_then_verify_verified(direct_vm, direct_deploy, direct_alice):
     b = contract.get_badge(bid)
     assert b["verdict"] == "PENDING"
     assert b["skill"] == SKILL_SKILL
-    assert b["github_url"] == SKILL_GITHUB_URL
+    assert b["owner_proof_url"] == skill_proof_url(direct_alice)
+    assert b["evidence_url"] == SKILL_EVIDENCE_URL
     assert b["holder"].lower() == to_hex(direct_alice).lower()
     assert contract.get_stats()["pending"] == 1
 
@@ -115,26 +120,79 @@ def test_claim_limit_per_user(direct_vm, direct_deploy, direct_alice):
 
 def test_claim_bad_url_reverts(direct_vm, direct_deploy, direct_alice):
     contract = direct_deploy("contracts/skill_badge.py")
+    good_proof = skill_proof_url(direct_alice)
     for url in ("http://github.com/example-dev/contracts", "https://localhost/x", "https://127.0.0.1/x"):
         direct_vm.sender = direct_alice
-        with direct_vm.expect_revert("github_url must be a public https"):
-            contract.claim_skill(url, SKILL_SKILL, SKILL_NOTE)
+        with direct_vm.expect_revert("owner_proof_url must be a public https"):
+            contract.claim_skill(url, SKILL_EVIDENCE_URL, SKILL_SKILL, SKILL_NOTE)
+        direct_vm.sender = direct_alice
+        with direct_vm.expect_revert("evidence_url must be a public https"):
+            contract.claim_skill(good_proof, url, SKILL_SKILL, SKILL_NOTE)
+
+
+# ---------------------------------------------- commit-pinned evidence rules
+def test_claim_rejects_non_raw_urls(direct_vm, direct_deploy, direct_alice):
+    """Repo pages, blob links and other hosts can't be evidence — the file
+    must be pinned to a full commit SHA so validators read one immutable copy."""
+    contract = direct_deploy("contracts/skill_badge.py")
+    good_proof = skill_proof_url(direct_alice)
+    branch = f"https://raw.githubusercontent.com/{SKILL_OWNER}/{SKILL_REPO}/main/src/contract.sol"
+    blob = f"https://github.com/{SKILL_OWNER}/{SKILL_REPO}/blob/{SKILL_SHA}/src/contract.sol"
+    repo_page = f"https://github.com/{SKILL_OWNER}/{SKILL_REPO}"
+    short_sha = f"https://raw.githubusercontent.com/{SKILL_OWNER}/{SKILL_REPO}/{SKILL_SHA[:7]}/src/contract.sol"
+    for url in (branch, blob, repo_page, short_sha):
+        direct_vm.sender = direct_alice
+        with direct_vm.expect_revert("evidence_url must be a raw.githubusercontent.com file pinned"):
+            contract.claim_skill(good_proof, url, SKILL_SKILL, SKILL_NOTE)
+
+
+def test_claim_rejects_unpinned_owner_proof(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/skill_badge.py")
+    unpinned = (
+        f"https://raw.githubusercontent.com/{SKILL_OWNER}/{SKILL_REPO}/main/"
+        f"skillbadge-verify/{to_hex(direct_alice).lower()}.txt"
+    )
+    direct_vm.sender = direct_alice
+    with direct_vm.expect_revert("owner_proof_url must be a raw.githubusercontent.com file pinned"):
+        contract.claim_skill(unpinned, SKILL_EVIDENCE_URL, SKILL_SKILL, SKILL_NOTE)
+
+
+def test_claim_requires_holder_address_in_proof(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """The owner-proof file must be named after the claimant's own wallet, so
+    only someone who controls the repo can place it."""
+    contract = direct_deploy("contracts/skill_badge.py")
+    # Proof names BOB's address while ALICE claims — must revert.
+    stranger_proof = skill_proof_url(direct_bob)
+    direct_vm.sender = direct_alice
+    with direct_vm.expect_revert("owner proof URL must reference this wallet address"):
+        contract.claim_skill(stranger_proof, SKILL_EVIDENCE_URL, SKILL_SKILL, SKILL_NOTE)
+    # Same-file trick: the proof path doubling as evidence is rejected too.
+    same = skill_proof_url(direct_alice)
+    with direct_vm.expect_revert("different files"):
+        contract.claim_skill(same, same, SKILL_SKILL, SKILL_NOTE)
+
+
+def test_claim_requires_proof_and_evidence_from_same_repo(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/skill_badge.py")
+    proof = skill_proof_url(direct_alice, owner="other-owner")
+    with direct_vm.expect_revert("same repository"):
+        contract.claim_skill(proof, SKILL_EVIDENCE_URL, SKILL_SKILL, SKILL_NOTE)
 
 
 def test_claim_bad_skill_reverts(direct_vm, direct_deploy, direct_alice):
     contract = direct_deploy("contracts/skill_badge.py")
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("skill must be 2-40 characters"):
-        contract.claim_skill(SKILL_GITHUB_URL, "x", SKILL_NOTE)
+        contract.claim_skill(skill_proof_url(direct_alice), SKILL_EVIDENCE_URL, "x", SKILL_NOTE)
     with direct_vm.expect_revert("skill may only contain"):
-        contract.claim_skill(SKILL_GITHUB_URL, "solidity<script>", SKILL_NOTE)
+        contract.claim_skill(skill_proof_url(direct_alice), SKILL_EVIDENCE_URL, "solidity<script>", SKILL_NOTE)
 
 
 def test_claim_long_note_reverts(direct_vm, direct_deploy, direct_alice):
     contract = direct_deploy("contracts/skill_badge.py")
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("note must be 300 characters or less"):
-        contract.claim_skill(SKILL_GITHUB_URL, SKILL_SKILL, "x" * 301)
+        contract.claim_skill(skill_proof_url(direct_alice), SKILL_EVIDENCE_URL, SKILL_SKILL, "x" * 301)
 
 
 # ---------------------------------------------------------------- verify rules
@@ -252,4 +310,5 @@ def test_stats_counts(direct_vm, direct_deploy, direct_alice):
     direct_vm.clear_mocks()
     stats = contract.get_stats()
     assert stats["verified"] == 1
-    assert stats["pending"] == 1  # rejected counts alongside pending as "not verified"
+    assert stats["pending"] == 0
+    assert stats["rejected"] == 1

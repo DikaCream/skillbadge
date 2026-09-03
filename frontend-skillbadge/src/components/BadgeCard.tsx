@@ -51,13 +51,13 @@ export default function BadgeCard({ badge, me, busy, onVerify }: BadgeCardProps)
       </h3>
 
       <a
-        href={badge.github_url}
+        href={badge.evidence_url}
         target="_blank"
         rel="noreferrer"
         className="mono badge-url"
-        title="Repo the validators fetched as evidence"
+        title="Commit-pinned evidence the validators fetched"
       >
-        {badge.github_url.replace(/^https?:\/\//, "")}
+        {badge.evidence_url.replace(/^https?:\/\//, "")}
       </a>
 
       <p className="badge-note">{badge.note || "No note"}</p>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import ErrorBanner from "../components/ErrorBanner";
 import { useSkillBadge } from "../context/SkillBadgeContext";
 import { formatAddress } from "../lib/client";
 import type { Badge, Stats } from "../lib/types";
@@ -9,20 +10,38 @@ export default function Home() {
   const { contract } = useSkillBadge();
   const [stats, setStats] = useState<Stats | null>(null);
   const [top, setTop] = useState<Badge[]>([]);
+  const [error, setError] = useState<unknown>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  const load = useCallback(async () => {
+    setRetrying(true);
+    try {
+      const [s, t] = await Promise.all([
+        contract.getStats(),
+        contract.getLeaderboard(5),
+      ]);
+      setStats(s);
+      setTop(t);
+      setError(null);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setRetrying(false);
+    }
+  }, [contract]);
 
   useEffect(() => {
-    contract
-      .getStats()
-      .then(setStats)
-      .catch(() => {});
-    contract
-      .getLeaderboard(5)
-      .then(setTop)
-      .catch(() => {});
-  }, [contract]);
+    load();
+  }, [load]);
 
   return (
     <>
+      {error && (
+        <div className="container">
+          <ErrorBanner error={error} onRetry={load} retrying={retrying} />
+        </div>
+      )}
+
       <section className="hero">
         <div className="container">
           <span className="eyebrow">

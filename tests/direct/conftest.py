@@ -60,25 +60,45 @@ def _reset_block_time():
 
 # ---------------------------------------------------------------- SkillBadge
 SKILL_SKILL = "solidity"
-SKILL_GITHUB_URL = "https://github.com/example-dev/contracts"
+# A commit-pinned raw file (full 40-hex SHA) — the only form the contract
+# accepts as evidence: the content is immutable, so validators read exactly
+# what was claimed. The owner-proof file carries the holder's own address.
+SKILL_SHA = "a" * 40
+SKILL_OWNER = "example-dev"
+SKILL_REPO = "contracts"
+SKILL_EVIDENCE_URL = (
+    f"https://raw.githubusercontent.com/{SKILL_OWNER}/{SKILL_REPO}/"
+    f"{SKILL_SHA}/src/contract.sol"
+)
 SKILL_NOTE = "A documented Solidity project with tests, audits and a deployed contract."
 # Body served for every mocked fetch; the judge LLM sees this as evidence.
 SKILL_PAGE = "Solidity code, tests, audits, deployment addresses, README."
+SKILL_PROOF_BODY = "skillbadge-owner-proof\nwallet: 0xSOMEADDRESS"
+
+
+def skill_proof_url(holder, sha=SKILL_SHA, owner=SKILL_OWNER, repo=SKILL_REPO):
+    """Owner-proof URL naming the holder's wallet, pinned to a commit."""
+    return (
+        f"https://raw.githubusercontent.com/{owner}/{repo}/{sha}/"
+        f"skillbadge-verify/{to_hex(holder).lower()}.txt"
+    )
 
 
 def mock_verification(vm, verdict="VERIFIED", tier="silver", reason="Repo shows real, working Solidity.", body=SKILL_PAGE):
     """Mock the validator's web fetch and judge LLM for a SkillBadge verification."""
-    vm.mock_web(r".*github\.com.*", {"status": 200, "body": body})
+    vm.mock_web(r".*(github\.com|githubusercontent\.com).*", {"status": 200, "body": body})
     vm.mock_llm(
         r".*hiring panel.*",
         json.dumps({"verdict": verdict, "tier": tier, "reason": reason}),
     )
 
 
-def claim_badge(contract, vm, holder, url=SKILL_GITHUB_URL, skill=SKILL_SKILL, note=SKILL_NOTE):
-    """Holder claims a skill; returns its int badge id."""
+def claim_badge(contract, vm, holder, proof_url=None, evidence_url=SKILL_EVIDENCE_URL, skill=SKILL_SKILL, note=SKILL_NOTE):
+    """Holder claims a skill with owner-proof + evidence; returns its int badge id."""
+    if proof_url is None:
+        proof_url = skill_proof_url(holder)
     vm.sender = holder
-    return int(contract.claim_skill(url, skill, note))
+    return int(contract.claim_skill(proof_url, evidence_url, skill, note))
 
 
 def verified_badge(contract, vm, holder, verdict="VERIFIED", tier="silver", **kwargs):

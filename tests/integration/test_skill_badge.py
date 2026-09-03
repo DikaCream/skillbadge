@@ -2,12 +2,19 @@
 
 Run with: gltest --network studionet tests/integration/test_skill_badge.py -v -s
 
-These exercise the real consensus pipeline: a claim is filed pointing at a
-public GitHub repo, and at verification time GenLayer's AI validators fetch
-the repo, review it as evidence for the claimed skill, and reach an
-equivalence-principle tier verdict. The verdict itself is genuine consensus
-(not reproducible byte-for-byte), so the tests assert the *mechanism*: the
-badge reaches a terminal VERIFIED or REJECTED state and the counters move.
+These exercise the real consensus pipeline: a claim files an owner-proof file
+(named after the claimant's wallet) plus a commit-pinned raw evidence file in
+DikaCream/skillbadge, and at verification time GenLayer's AI validators fetch
+both, check the proof contains the wallet address, review the evidence for
+the claimed skill, and reach an equivalence-principle tier verdict. The
+verdict itself is genuine consensus (not reproducible byte-for-byte), so the
+tests assert the *mechanism*: the badge reaches a terminal VERIFIED or
+REJECTED state and the counters move.
+
+Account 0 is fixed in gltest.config.yaml; its wallet is bound to the repo
+via the skillbadge-verify/ file committed in this repository. If you change
+those accounts, commit a new skillbadge-verify/<address>.txt file and update
+COMMIT_SHA to a commit that contains it.
 """
 
 import time
@@ -17,13 +24,25 @@ from genlayer_py.types import CalldataAddress
 from gltest import get_accounts, get_contract_factory
 from gltest.assertions import tx_execution_succeeded
 
-# A real, stable, public repo full of actual code — good evidence for a
-# "python" skill claim that validators can fetch and judge.
-GITHUB_URL = "https://github.com/genlayerlabs/genlayer-py"
+# A real, stable, public repo holding this contract and its frontend. The
+# owner-proof file (named after the fixed test account) and the evidence files
+# are committed here, and every claim URL pins a full 40-hex commit SHA so the
+# validators read one immutable copy.
+OWNER = "DikaCream"
+REPO = "skillbadge"
+COMMIT_SHA = "__FILL_AFTER_COMMIT__"
+RAW = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{COMMIT_SHA}"
 SKILL = "python"
+EVIDENCE_PYTHON = f"{RAW}/skill_badge.py"
+EVIDENCE_TYPESCRIPT = f"{RAW}/frontend-skillbadge/src/lib/contract.ts"
 TERMINAL_VERDICTS = {"VERIFIED", "REJECTED"}
 MAX_WAIT_SECONDS = 180
 POLL_SECONDS = 5
+
+
+def owner_proof_url(holder_address: str) -> str:
+    """The wallet-bound proof file for a given holder address."""
+    return f"{RAW}/skillbadge-verify/{holder_address.lower()}.txt"
 
 
 def _deploy(account):
@@ -55,7 +74,12 @@ def test_claim_then_verify_reaches_consensus():
     contract = _deploy(account=holder)
 
     receipt = contract.claim_skill(
-        args=[GITHUB_URL, SKILL, "The genlayer-py SDK: real maintained Python."],
+        args=[
+            owner_proof_url(holder.address),
+            EVIDENCE_PYTHON,
+            SKILL,
+            "The SkillBadge contract itself: real, maintained GenVM Python.",
+        ],
     ).transact(wait_interval=10000, wait_retries=15)
     assert tx_execution_succeeded(receipt)
 
@@ -102,7 +126,12 @@ def test_views_expose_claims_and_leaderboard():
     contract = _deploy(account=holder)
 
     receipt = contract.claim_skill(
-        args=[GITHUB_URL, "typescript", ""],
+        args=[
+            owner_proof_url(holder.address),
+            EVIDENCE_TYPESCRIPT,
+            "typescript",
+            "",
+        ],
     ).transact(wait_interval=10000, wait_retries=15)
     assert tx_execution_succeeded(receipt)
 
