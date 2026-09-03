@@ -1,42 +1,45 @@
 # SkillBadge
 
-SkillBadge is a credential dapp on GenLayer's StudioNet. You claim a skill, say "python" or "typescript", against a public GitHub repo. The network's validators fetch your URL, read what's actually there, and vote on a verdict: **VERIFIED** (bronze, silver, or gold) or **REJECTED**, each with a written reason. No money moves in either case.
+SkillBadge is a credential dapp on GenLayer's StudioNet. You claim a skill, say "python" or "typescript", and back it with code in a GitHub repo you own. The network's validators fetch that code, check the repo is really yours, and vote: **VERIFIED** (bronze, silver, or gold) or **REJECTED**, each with a written reason. No money moves in either case.
 
 Claims and verifications are free. Anyone can verify any badge, not just their own, and a verified badge stays on-chain as public proof.
 
 ## Try it
 
 - App: https://skillbadge-cyan.vercel.app (chain 61999, no wallet funds needed)
-- Contract: `0xde308783bDB67467cb94f4De6d9Bf65e73C0A321` on StudioNet, deployed in tx `0xf5a7a3c6...6252` with 5/5 validator agreement
-- Board state (early September 2026): three claims, two verified
+- Contract: `0x4fd779b14531f933CD271B5DD78fC792918b53Df` on StudioNet
+- Board state (September 2026): two claims, both VERIFIED silver
 
 | Badge | Skill | Evidence | Verdict |
 |---|---|---|---|
-| 1 | python | `genlayerlabs/genlayer-py` repo page | VERIFIED silver |
-| 2 | typescript | `DikaCream/Truth-Bets` repo page | REJECTED |
-| 3 | typescript | raw `contract.ts` from the same repo | VERIFIED silver |
+| 1 | python | `contracts/skill_badge.py`, pinned to a commit | VERIFIED silver |
+| 2 | typescript | `frontend-skillbadge/src/lib/contract.ts`, pinned to a commit | VERIFIED silver |
 
-Badges 2 and 3 are the same repo and the same skill. The only difference is the URL form, and that's worth understanding before you claim anything.
+Both claims use the same wallet and the same owner-proof file, `skillbadge-verify/<wallet-address>.txt`, committed in this repo. That file is what ties the wallet to the GitHub account.
 
-## What validators actually read
+## What the validators check
 
-The contract fetches evidence with `web.render(url, mode="text")`. Validators get the page as rendered text, not a file tree. That single fact decides most claims:
+A claim carries two URLs, both raw GitHub files pinned to a full commit SHA:
 
-- A repo landing page (`github.com/owner/repo`) renders as its README plus a list of filenames. No source code. Claiming "typescript" against that page gets REJECTED, because there's nothing to read.
-- A raw file (`raw.githubusercontent.com/owner/repo/main/src/file.ts`) renders as the actual source. That's what verifies.
-- Docs and rendered content, like a README that shows real usage, work when the page itself carries the proof.
+1. **Owner-proof file.** The URL must contain the claimant's wallet address, and the file itself must contain it too. Only the repo owner can commit a file named after a wallet, so this binds the wallet to the GitHub identity.
+2. **Evidence file.** The code to judge, from the same repo and commit as the proof.
 
-Badge 2 above was rejected with: "only a repository README and file listing, not actual TypeScript source code." Re-claimed against the raw file, it came back VERIFIED silver. Same repo, same skill; only the URL changed.
+The contract refuses everything else: repo landing pages, `/blob/` links, branch names, and short SHAs. A landing page renders as README plus filenames, so there's nothing to read. A branch moves, so evidence could change after the claim. Only a full 40-hex SHA pins the exact content the validators will judge.
 
-The claim form enforces this rule for you. As you type it shows what the validators will fetch, and it rewrites GitHub `/blob/` links to their `raw.githubusercontent.com` equivalents before submitting.
+The claim form handles this for you. Paste a `/blob/` link or a branch-based raw URL and the form resolves it to the current commit through the GitHub API, then shows you the pinned URL before you submit.
 
 ## How a claim works
 
-1. You file a claim: a public https URL, a skill name (2–40 chars), an optional note up to 300 chars. Ten claims per address.
-2. Anyone calls `verify_badge(badge_id)`. The validators fetch the URL and settle on a verdict with a reason.
-3. A verdict that can't be parsed leaves the badge PENDING. You can retry after a 5-minute cooldown, up to 5 attempts, and a failed attempt costs nothing.
+1. Commit `skillbadge-verify/<your-address>.txt` (your wallet address inside) to the repo that proves the skill. Commit the code to judge too, then copy both raw links from GitHub.
+2. File the claim: both URLs, a skill name (2-40 chars), an optional note up to 300 chars. Ten claims per address.
+3. Anyone calls `verify_badge(badge_id)`. Validators fetch the proof file and the evidence, check ownership first, then judge the code.
+4. A verdict that can't be parsed leaves the badge PENDING. You can retry after a 5-minute cooldown, up to 5 attempts. A failed attempt costs nothing.
 
 The contract strips `[System]` and `[User]` markers from claim text so prompt injection has nothing to grab, and it refuses URLs that resolve to private or internal hosts.
+
+## Failure handling
+
+Reads retry automatically when the RPC drops a request, which happens now and then on consensus calls. When something does fail, the UI says what kind of failure it was: network (can't reach StudioNet), contract (the call reverted, with the reason), or wallet (request rejected). Every banner has a retry button where retrying is safe.
 
 ## Run it locally
 
@@ -44,7 +47,7 @@ The contract strips `[System]` and `[User]` markers from claim text so prompt in
 ./scripts/setup.sh                # venv + deps (official PyPI via pip.conf)
 ./scripts/verify-skillbadge.sh    # lint + direct tests
 ./scripts/verify-skillbadge.sh --frontend      # + frontend typecheck & build
-./scripts/verify-skillbadge.sh --integration   # StudioNet tests (~4 min)
+./scripts/verify-skillbadge.sh --integration   # StudioNet tests (~5 min)
 ```
 
 Frontend:
@@ -70,14 +73,15 @@ Point `VITE_CONTRACT_ADDRESS` in `frontend-skillbadge/.env.local` at the new add
 ```
 contracts/skill_badge.py        the contract, one file
 frontend-skillbadge/            Vite + React app
+skillbadge-verify/              owner-proof files binding wallets to this repo
 tests/direct/                   local tests, mocked web + LLM
 tests/integration/              StudioNet tests against real consensus
 scripts/setup.sh                environment bootstrap
 scripts/verify-skillbadge.sh    lint + tests in one command
 ```
 
-Pages: `/` shows stats and top developers, `/badges` lists every claim with search, verdict filters that show real counts, sorting, claim and review dates, attempt chips, and a live retry countdown, and `/claim` files a claim with the evidence preview described above.
+Pages: `/` shows stats and top developers, `/badges` lists every claim with search, verdict filters that show real counts, sorting, dates, attempt chips, and a live retry countdown, and `/claim` files a claim with the live evidence preview described above.
 
 ## Tests
 
-Direct tests mock the web fetch and the LLM, so the retry loop, the attempt cap, duplicate claims, both tiers, and the leaderboard all run locally. Integration tests hit real StudioNet consensus and verify `genlayerlabs/genlayer-py` (skill: python) end to end. The frontend has no automated test suite yet; its pages are typechecked and built, and the contract logic carries the real tests.
+Direct tests mock the web fetch and the LLM, so the URL rules (commit pinning, wallet binding, same-repo check), the retry loop, the attempt cap, duplicate claims, both tiers, and the leaderboard all run locally. Integration tests hit real StudioNet consensus and verify the python claim end to end. The frontend has no automated test suite yet; its pages are typechecked and built, and the contract logic carries the real tests.

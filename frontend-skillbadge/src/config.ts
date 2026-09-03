@@ -14,7 +14,7 @@ function env(name: string, fallback: string): string {
 // Live SkillBadge deployment on StudioNet.
 export const CONTRACT_ADDRESS = env(
   "VITE_CONTRACT_ADDRESS",
-  "0xde308783bDB67467cb94f4De6d9Bf65e73C0A321",
+  "0x4fd779b14531f933CD271B5DD78fC792918b53Df",
 );
 
 export const NETWORK = env("VITE_GENLAYER_NETWORK", "studionet");
