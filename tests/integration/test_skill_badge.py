@@ -30,7 +30,7 @@ from gltest.assertions import tx_execution_succeeded
 # validators read one immutable copy.
 OWNER = "DikaCream"
 REPO = "skillbadge"
-COMMIT_SHA = "d14c11853b575f38eca22fffd83d913fb22794ff"
+COMMIT_SHA = "f3d4580d4238903a72dc806304c0c5725ccbeae6"
 RAW = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{COMMIT_SHA}"
 SKILL = "python"
 EVIDENCE_PYTHON = f"{RAW}/skill_badge.py"
