@@ -449,9 +449,12 @@ Respond with STRICT JSON only, no prose, no markdown fences:
 
         principle = """Both answers are verification verdicts for the same badge.
 They are equivalent if and only if their "verdict" strings are exactly equal
-(VERIFIED or REJECTED) and, for VERIFIED, their "tier" strings are exactly
-equal (bronze, silver or gold). The "reason" text may differ in wording. If
-either answer contains an "error" key, they are equivalent only if both do."""
+(VERIFIED or REJECTED). When the verdict is VERIFIED, a different "tier" is
+still equivalent: the tiers (bronze, silver, gold) are a rough ranking and
+validators may reasonably disagree on the boundary, so the proposer's tier
+stands as long as the verdict agrees. The "reason" text may differ in
+wording. If either answer contains an "error" key, they are equivalent only
+if both do."""
         ok = False
         verdict = ""
         tier = ""
